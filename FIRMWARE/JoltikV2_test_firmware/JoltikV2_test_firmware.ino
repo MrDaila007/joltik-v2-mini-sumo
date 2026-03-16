@@ -1,4 +1,7 @@
 #include <Adafruit_NeoPixel.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <EEPROM.h>
 #include <RC5.h>
 #include <GyverButton.h>
@@ -9,7 +12,12 @@
 #define ReverseMotorL 1
 #define ReverseMotorR 1
 
-
+// OLED display SSD1306 0.91" 128x32
+#define OLED_SDA 2
+#define OLED_SCL 3
+#define OLED_WIDTH 128
+#define OLED_HEIGHT 32
+#define OLED_ADDR 0x3C
 
 // Pin definitions
 #define AIN_1 5    // Left motor (direction 1)
@@ -27,9 +35,15 @@
 #define RGB_led 16     // WS2812 LED
 #define IR_PIN 26      // IR receiver pin
 
+// ESP8266 serial link (Serial1: GP0=TX, GP1=RX on RP2040-Zero)
+#define ESP_SERIAL Serial1
+#define ESP_BAUD 9600
+
 Adafruit_NeoPixel pixel(1, RGB_led, NEO_GRB + NEO_KHZ800);
+Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 RC5 rc5(IR_PIN);
 GButton button(BTN_PIN);
+bool oledReady = false;
 
 #if (UseGyverMotor == 1)
 #include <GyverMotor2.h>
@@ -76,6 +90,9 @@ byte stopCommand = 0;
 byte startCommand = 0;
 bool emergencyStop = false;
 
+// ESP serial buffer
+String espBuffer;
+
 // Read opponent sensor with inversion
 bool readOpponentSensor(int pin) {
   return !digitalRead(pin); // Invert value
@@ -83,6 +100,8 @@ bool readOpponentSensor(int pin) {
 
 void setup() {
   Serial.begin(115200);
+  ESP_SERIAL.begin(ESP_BAUD);
+  espBuffer.reserve(128);
   if(DEBUG) Serial.println("Initializing...");
   
 
@@ -125,7 +144,27 @@ void setup() {
   // Initialize LED
   pixel.begin();
   pixel.clear();
-  
+
+  // Initialize OLED
+  Wire.setSDA(OLED_SDA);
+  Wire.setSCL(OLED_SCL);
+  Wire.begin();
+  if(oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    oledReady = true;
+    oled.clearDisplay();
+    oled.setTextColor(SSD1306_WHITE);
+    oled.setTextSize(2);
+    oled.setCursor(10, 0);
+    oled.print("JOLTIK");
+    oled.setTextSize(1);
+    oled.setCursor(10, 20);
+    oled.print("V2 starting...");
+    oled.display();
+    if(DEBUG) Serial.println("OLED OK");
+  } else {
+    if(DEBUG) Serial.println("OLED not found");
+  }
+
   // Initialize EEPROM
   EEPROM.begin(512);
   loadSettings();
@@ -150,6 +189,8 @@ void setup() {
 
 void loop() {
   button.tick();
+  processEspSerial();
+  updateDisplay();
   if(handleButtonCommands()) return;
   if(processRemoteCommands()) return;
   if(emergencyStop) return;
@@ -347,9 +388,17 @@ void emergencyStopRobot() {
   emergencyStop = true;
   MotorStop();
   setColor(0, 0, 255);
-  
+
+  if(oledReady) {
+    oled.clearDisplay();
+    oled.setTextSize(2);
+    oled.setCursor(16, 0);
+    oled.print("!! STOP !!");
+    oled.display();
+  }
+
   if(DEBUG) Serial.println("!!! EMERGENCY STOP !!!");
-  
+
   delay(100);
   emergencyStop = false;
 }
@@ -364,6 +413,7 @@ void startWithDelay() {
   for(int i = 5; i > 0; i--) {
     if(checkEmergency()) return;
     setColor(0, 0, 255);
+    oledCountdown(i);
     if(DEBUG) Serial.println(i);
     delay(250);
     if(checkEmergency()) return;
@@ -492,4 +542,208 @@ void blinkColor(int r, int g, int b, int count) {
   else if(robotState == SEARCHING) setColor(0, 255, 0);
   else if(robotState == ATTACKING) setColor(255, 0, 0);
   else setColor(255, 255, 0);
+}
+
+// ---- OLED Display ----
+
+void updateDisplay() {
+  if(!oledReady) return;
+  static unsigned long lastUpdate = 0;
+  if(millis() - lastUpdate < 200) return;
+  lastUpdate = millis();
+
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+
+  switch(robotState) {
+    case WAITING:   drawWaitingScreen(); break;
+    case SEARCHING: drawActiveScreen("SEARCH"); break;
+    case ATTACKING: drawActiveScreen("ATTACK"); break;
+    case AVOIDING:  drawActiveScreen("AVOID"); break;
+  }
+
+  oled.display();
+}
+
+void drawWaitingScreen() {
+  // Title
+  oled.setTextSize(2);
+  oled.setCursor(4, 0);
+  oled.print("JOLTIK V2");
+
+  // Config info line
+  oled.setTextSize(1);
+  oled.setCursor(0, 20);
+  oled.print(settings.startMode == FACE_TO_FACE ? "F2F" : "B2B");
+  oled.print(" Ln:");
+  oled.print(settings.lineSensorEnabled ? "ON" : "--");
+  oled.print(" D:");
+  oled.print(settings.dohyoCommand);
+
+  // Blinking "READY" indicator
+  if((millis() / 500) % 2 == 0) {
+    oled.setCursor(98, 20);
+    oled.print("READY");
+  }
+}
+
+void drawActiveScreen(const char* stateName) {
+  // State name header
+  oled.setTextSize(1);
+  oled.setCursor(0, 0);
+  oled.print("> ");
+  oled.print(stateName);
+
+  // Robot top-down view (left side, 0-60)
+  // Body outline
+  oled.drawRoundRect(18, 10, 28, 22, 3, SSD1306_WHITE);
+
+  // Direction arrow inside body
+  oled.drawLine(32, 14, 28, 18, SSD1306_WHITE);
+  oled.drawLine(32, 14, 36, 18, SSD1306_WHITE);
+
+  // Sensor indicators (filled = detecting, outline = idle)
+  drawSensor(24, 8, readOpponentSensor(SEN_FL));   // FL
+  drawSensor(38, 8, readOpponentSensor(SEN_FR));    // FR
+  drawSensor(12, 19, readOpponentSensor(SEN_L));    // L
+  drawSensor(50, 19, readOpponentSensor(SEN_R));    // R
+
+  // Sensor labels
+  oled.setTextSize(1);
+  oled.setCursor(21, 1);  oled.print("FL");
+  oled.setCursor(38, 1);  oled.print("FR");
+
+  // Line sensor values (right side)
+  int lineL = analogRead(SEN_Line_L);
+  int lineR = analogRead(SEN_Line_R);
+
+  oled.setCursor(66, 0);
+  oled.print("LnL:");
+  oled.print(lineL);
+
+  oled.setCursor(66, 10);
+  oled.print("LnR:");
+  oled.print(lineR);
+
+  // Line sensor mini bar graphs
+  int barL = map(constrain(lineL, 0, 1023), 0, 1023, 0, 24);
+  int barR = map(constrain(lineR, 0, 1023), 0, 1023, 0, 24);
+  oled.drawRect(102, 0, 26, 7, SSD1306_WHITE);
+  oled.fillRect(102, 0, barL, 7, SSD1306_WHITE);
+  oled.drawRect(102, 10, 26, 7, SSD1306_WHITE);
+  oled.fillRect(102, 10, barR, 7, SSD1306_WHITE);
+
+  // Line threshold marker
+  int threshX = map(LINE_THRESHOLD, 0, 1023, 0, 24) + 102;
+  oled.drawFastVLine(threshX, 0, 7, SSD1306_INVERSE);
+  oled.drawFastVLine(threshX, 10, 7, SSD1306_INVERSE);
+
+  // Config reminder at bottom
+  oled.setCursor(66, 22);
+  oled.print(settings.startMode == FACE_TO_FACE ? "F2F" : "B2B");
+  oled.print(" Ln:");
+  oled.print(settings.lineSensorEnabled ? "ON" : "--");
+}
+
+void drawSensor(int x, int y, bool active) {
+  if(active) {
+    oled.fillCircle(x, y, 3, SSD1306_WHITE);
+  } else {
+    oled.drawCircle(x, y, 3, SSD1306_WHITE);
+  }
+}
+
+// Show countdown number on OLED
+void oledCountdown(int num) {
+  if(!oledReady) return;
+  oled.clearDisplay();
+  oled.setTextSize(3);
+  oled.setCursor(52, 4);
+  oled.print(num);
+  oled.display();
+}
+
+// ---- ESP8266 Serial Protocol ----
+
+void processEspSerial() {
+  while(ESP_SERIAL.available()) {
+    char c = ESP_SERIAL.read();
+    if(c == '\n') {
+      espBuffer.trim();
+      if(espBuffer.length() > 0) {
+        handleEspCommand(espBuffer);
+      }
+      espBuffer = "";
+    } else if(c != '\r') {
+      if(espBuffer.length() < 127) {
+        espBuffer += c;
+      }
+    }
+  }
+}
+
+void handleEspCommand(const String& cmd) {
+  if(DEBUG) { Serial.print("ESP cmd: "); Serial.println(cmd); }
+
+  if(cmd == "$SENSORS") {
+    sendSensorData();
+  }
+  else if(cmd.startsWith("$DRIVE:")) {
+    // $DRIVE:left,right
+    int comma = cmd.indexOf(',', 7);
+    if(comma > 0) {
+      int left = cmd.substring(7, comma).toInt();
+      int right = cmd.substring(comma + 1).toInt();
+      drive(left, right);
+      ESP_SERIAL.println("#OK");
+    }
+  }
+  else if(cmd == "$STOP") {
+    emergencyStopRobot();
+    ESP_SERIAL.println("#OK");
+  }
+  else if(cmd == "$START") {
+    if(robotState == WAITING) {
+      startWithDelay();
+    }
+    ESP_SERIAL.println("#OK");
+  }
+  else if(cmd == "$GETCFG") {
+    sendConfig();
+  }
+  else if(cmd.startsWith("$SETCFG:")) {
+    // $SETCFG:dohyo,mode,lineEn
+    int p1 = cmd.indexOf(',', 8);
+    int p2 = cmd.indexOf(',', p1 + 1);
+    if(p1 > 0 && p2 > 0) {
+      settings.dohyoCommand = cmd.substring(8, p1).toInt();
+      settings.startMode = (StartMode)cmd.substring(p1 + 1, p2).toInt();
+      settings.lineSensorEnabled = cmd.substring(p2 + 1).toInt() == 1;
+      stopCommand = settings.dohyoCommand;
+      startCommand = (settings.dohyoCommand & 0xFE) + 1;
+      saveSettings();
+      ESP_SERIAL.println("#OK");
+      if(DEBUG) Serial.println("Config updated via ESP");
+    }
+  }
+}
+
+void sendSensorData() {
+  // #S:fr,fl,r,l,lineR,lineL,state
+  ESP_SERIAL.print("#S:");
+  ESP_SERIAL.print(readOpponentSensor(SEN_FR)); ESP_SERIAL.print(',');
+  ESP_SERIAL.print(readOpponentSensor(SEN_FL)); ESP_SERIAL.print(',');
+  ESP_SERIAL.print(readOpponentSensor(SEN_R));  ESP_SERIAL.print(',');
+  ESP_SERIAL.print(readOpponentSensor(SEN_L));  ESP_SERIAL.print(',');
+  ESP_SERIAL.print(analogRead(SEN_Line_R));      ESP_SERIAL.print(',');
+  ESP_SERIAL.print(analogRead(SEN_Line_L));      ESP_SERIAL.print(',');
+  ESP_SERIAL.println((int)robotState);
+}
+
+void sendConfig() {
+  // #CFG:dohyo,mode,lineEn
+  ESP_SERIAL.print("#CFG:");
+  ESP_SERIAL.print(settings.dohyoCommand); ESP_SERIAL.print(',');
+  ESP_SERIAL.print((int)settings.startMode); ESP_SERIAL.print(',');
+  ESP_SERIAL.println(settings.lineSensorEnabled ? 1 : 0);
 }
