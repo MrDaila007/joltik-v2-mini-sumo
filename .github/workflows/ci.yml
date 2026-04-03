@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arduino:
+    name: Arduino compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Configure cores (AVR, RP2040, ESP8266)
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli config add board_manager.additional_urls \
+            https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr rp2040:rp2040 esp8266:esp8266
+
+      - name: Install Library Manager dependencies
+        run: |
+          arduino-cli lib install \
+            "GyverButton" \
+            "Adafruit GFX Library" \
+            "Adafruit SSD1306" \
+            "Adafruit BusIO" \
+            "WebSockets"
+
+      - name: Compile JoltikV1 (ATmega / Nano)
+        run: |
+          arduino-cli compile --warnings all \
+            --fqbn arduino:avr:nano \
+            --libraries FIRMWARE/Lib \
+            FIRMWARE/JoltikV1_last_test_firmware
+
+      - name: Compile Joltik V2 RP2040 sketches
+        run: |
+          for sketch in \
+            FIRMWARE/Joltik_v2_sumo_board_test \
+            FIRMWARE/JoltikV2_test_firmware \
+            FIRMWARE/JoltikV2_sumo_firmware
+          do
+            echo "==> $sketch"
+            arduino-cli compile --warnings all \
+              --fqbn rp2040:rp2040:waveshare_rp2040_zero \
+              --libraries FIRMWARE/Lib \
+              "$sketch"
+          done
+
+      - name: Compile JoltikV2 web controller (ESP8266)
+        run: |
+          arduino-cli compile --warnings all \
+            --fqbn esp8266:esp8266:d1_mini \
+            --libraries FIRMWARE/Lib \
+            FIRMWARE/JoltikV2_web_controller
+
+  zephyr:
+    name: Zephyr (rp2040_zero)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Zephyr workspace
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: FIRMWARE/joltik_v2_zephyr
+          toolchains: arm-zephyr-eabi
+          ccache-cache-key: zephyr-rp2040
+
+      - name: Build firmware
+        run: west build FIRMWARE/joltik_v2_zephyr -b rp2040_zero -p always
