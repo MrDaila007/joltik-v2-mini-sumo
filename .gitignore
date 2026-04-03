@@ -1,7 +1,19 @@
 # Zephyr / CMake–Ninja build trees
 FIRMWARE/joltik_v2_zephyr/build/
+FIRMWARE/joltik_v2_zephyr/build_tests/
+FIRMWARE/joltik_v2_zephyr/.cache/
 build_zephyr/
+build_tests/
 twister-out/
+
+# West manifest (managed locally)
+FIRMWARE/joltik_v2_zephyr/west.yml
+
+# Binary artifacts
+*.bin
+
+# Test logs
+test_output.log
 
 # OS / editor junk
 .DS_Store
