@@ -1,0 +1,159 @@
+/*
+ * Joltik V2 Mini Sumo Robot - Devicetree overlay for Waveshare RP2040-Zero
+ *
+ * Pin mapping:
+ *   Motor L speed: GPIO5  (PWM slice 2 ch B, pwm channel 5)
+ *   Motor L dir:   GPIO6  (GPIO)
+ *   Motor R dir:   GPIO7  (GPIO)
+ *   Motor R speed: GPIO8  (PWM slice 4 ch A, pwm channel 8)
+ *   Servo:         GPIO9  (PWM slice 4 ch B, pwm channel 9)
+ *   Sensor L:      GPIO10 (opponent, active-low)
+ *   Sensor R:      GPIO11 (opponent, active-low)
+ *   Sensor FL:     GPIO12 (opponent, active-low)
+ *   Sensor FR:     GPIO13 (opponent, active-low)
+ *   IR receiver:   GPIO14 (RC5 protocol)
+ *   Button:        GPIO15 (active-high)
+ *   WS2812 LED:    GPIO16 (already in base DTS)
+ *   Line R (ADC):  GPIO28 (ADC ch2)
+ *   Line L (ADC):  GPIO29 (ADC ch3)
+ *
+ * Note: GPIO8 (motor R) and GPIO9 (servo) share PWM slice 4.
+ *       Both run at 50Hz (servo frequency). Motor audible hum is acceptable.
+ */
+
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <dt-bindings/pinctrl/rpi-pico-rp2040-pinctrl.h>
+
+/ {
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+		debounce-interval-ms = <50>;
+
+		user_button: button_0 {
+			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+			label = "User button";
+		};
+	};
+
+	aliases {
+		sw0 = &user_button;
+	};
+
+	/* Motor PWM outputs */
+	motor_left_pwm: motor-left-pwm {
+		compatible = "pwm-leds";
+		motor_l: motor_l {
+			pwms = <&pwm 5 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	motor_right_pwm: motor-right-pwm {
+		compatible = "pwm-leds";
+		motor_r: motor_r {
+			pwms = <&pwm 8 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	servo_node: servo-node {
+		compatible = "pwm-leds";
+		servo_ch: servo_ch {
+			pwms = <&pwm 9 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	zephyr_user: zephyr,user {
+		/* Motor direction GPIOs */
+		motor-left-dir-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		motor-right-dir-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+
+		/* Opponent sensors (active-low: LOW = detected) */
+		sensor-fl-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+		sensor-fr-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+		sensor-l-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+		sensor-r-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+
+		/* IR receiver */
+		ir-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+
+		/* Line sensors (ADC channels) */
+		io-channels = <&adc 2>, <&adc 3>;
+		io-channel-names = "line_right", "line_left";
+	};
+};
+
+/* USB CDC ACM for shell and console */
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+/* ADC channels with proper resolution for line sensors */
+&adc {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@2 {
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@3 {
+		reg = <3>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/* Enable PWM with motor + servo pins */
+&pwm {
+	status = "okay";
+	pinctrl-0 = <&pwm_default>;
+	pinctrl-names = "default";
+};
+
+/* Add PWM pinctrl */
+&pinctrl {
+	pwm_default: pwm_default {
+		group1 {
+			pinmux = <PWM_2B_P5>,   /* Motor L speed */
+				 <PWM_4A_P8>,   /* Motor R speed */
+				 <PWM_4B_P9>;   /* Servo */
+		};
+	};
+};
+
+/* Carve out storage partition for NVS settings at end of 2MB flash */
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* Shrink code partition: 2MB - 256 bootloader - 64KB storage */
+		code_partition: partition@100 {
+			label = "code-partition";
+			reg = <0x100 (DT_SIZE_M(2) - 0x100 - DT_SIZE_K(64))>;
+			read-only;
+		};
+
+		/* 64KB storage partition at end of flash for NVS */
+		storage_partition: partition@1f0000 {
+			label = "storage";
+			reg = <0x1f0000 DT_SIZE_K(64)>;
+		};
+	};
+};

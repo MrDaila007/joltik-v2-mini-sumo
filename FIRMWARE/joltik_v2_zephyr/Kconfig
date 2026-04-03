@@ -1,0 +1,17 @@
+mainmenu "Joltik V2 Sumo Robot Configuration"
+
+config JOLTIK_DISPLAY
+	bool "Enable SSD1306 OLED display"
+	default n
+	select DISPLAY
+	select CHARACTER_FRAMEBUFFER
+	help
+	  Enable the optional 128x32 SSD1306 OLED display on I2C1 (GPIO2/GPIO3).
+
+config JOLTIK_IR_REMOTE
+	bool "Enable RC5 IR remote control"
+	default y
+	help
+	  Enable RC5 infrared remote control for tactic selection and start/stop.
+
+source "Kconfig.zephyr"
