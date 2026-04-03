@@ -1,0 +1,115 @@
+/*
+ * Joltik V2 test overlay for native_sim
+ * Emulates all hardware: GPIO, PWM, ADC, LED strip
+ */
+
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/led/led.h>
+#include <zephyr/dt-bindings/adc/adc.h>
+
+/ {
+	/* Fake PWM for motors and servo */
+	pwm: pwm_fake {
+		compatible = "zephyr,fake-pwm";
+		status = "okay";
+		#pwm-cells = <2>;
+		frequency = <10000000>;
+	};
+
+	/* Motor PWM nodes matching production overlay */
+	motor_left_pwm: motor-left-pwm {
+		compatible = "pwm-leds";
+		motor_l: motor_l {
+			pwms = <&pwm 5 PWM_MSEC(20)>;
+		};
+	};
+
+	motor_right_pwm: motor-right-pwm {
+		compatible = "pwm-leds";
+		motor_r: motor_r {
+			pwms = <&pwm 8 PWM_MSEC(20)>;
+		};
+	};
+
+	servo_node: servo-node {
+		compatible = "pwm-leds";
+		servo_ch: servo_ch {
+			pwms = <&pwm 9 PWM_MSEC(20)>;
+		};
+	};
+
+	/* Button */
+	buttons {
+		compatible = "gpio-keys";
+		debounce-interval-ms = <50>;
+
+		user_button: button_0 {
+			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+			label = "User button";
+		};
+	};
+
+	/* Fake LED strip */
+	fake_led_strip: fake-led-strip {
+		compatible = "joltik,fake-led-strip";
+		status = "okay";
+		chain-length = <1>;
+		color-mapping = <LED_COLOR_ID_GREEN
+				 LED_COLOR_ID_RED
+				 LED_COLOR_ID_BLUE>;
+	};
+
+	aliases {
+		sw0 = &user_button;
+		led-strip = &fake_led_strip;
+	};
+
+	zephyr_user: zephyr,user {
+		/* Motor direction GPIOs */
+		motor-left-dir-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		motor-right-dir-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+
+		/* Opponent sensors (active-low) */
+		sensor-fl-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+		sensor-fr-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+		sensor-l-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+		sensor-r-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+
+		/* IR receiver */
+		ir-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+
+		/* Line sensors (ADC: use ch0/ch1 on native_sim emulator) */
+		io-channels = <&adc0 0>, <&adc0 1>;
+		io-channel-names = "line_right", "line_left";
+	};
+};
+
+/* Extend GPIO emulator with enough pins */
+&gpio0 {
+	ngpios = <30>;
+};
+
+/* ADC emulator with line sensor channels */
+&adc0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_VDD_1";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_VDD_1";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};

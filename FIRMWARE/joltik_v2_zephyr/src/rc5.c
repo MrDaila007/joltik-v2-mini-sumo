@@ -157,3 +157,25 @@ bool rc5_get_message(struct rc5_message *msg, int32_t timeout_ms)
 	k_timeout_t timeout = (timeout_ms < 0) ? K_FOREVER : K_MSEC(timeout_ms);
 	return k_msgq_get(&ir_msgq, msg, timeout) == 0;
 }
+
+#ifdef CONFIG_ZTEST
+void rc5_test_reset(void)
+{
+	rc5_reset();
+}
+
+void rc5_test_decode_pulse(uint8_t signal, uint32_t period_us)
+{
+	rc5_decode_pulse(signal, period_us);
+}
+
+uint8_t rc5_test_get_bits(void)
+{
+	return rc5_bits;
+}
+
+uint16_t rc5_test_get_command(void)
+{
+	return rc5_command;
+}
+#endif

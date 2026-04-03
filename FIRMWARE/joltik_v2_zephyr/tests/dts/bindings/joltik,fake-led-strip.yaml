@@ -1,0 +1,5 @@
+description: Fake LED strip for testing
+
+compatible: "joltik,fake-led-strip"
+
+include: led-strip.yaml

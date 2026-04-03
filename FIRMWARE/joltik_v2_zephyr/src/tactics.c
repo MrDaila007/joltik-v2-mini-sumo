@@ -26,7 +26,7 @@ static void start_routine(void)
 		if (k_uptime_get() >= deadline) {
 			break;
 		}
-		k_yield();
+		k_sleep(K_MSEC(1));
 	}
 }
 

@@ -10,6 +10,7 @@
 #   make rom_report   Show flash usage breakdown
 #   make ram_report   Show RAM usage breakdown
 #   make size         Show firmware size summary
+#   make test         Build and run unit tests (native_sim)
 
 BOARD         ?= rp2040_zero
 BUILD_DIR     ?= build
@@ -25,8 +26,10 @@ export ZEPHYR_BASE
 export ZEPHYR_SDK_INSTALL_DIR := $(ZEPHYR_SDK)
 WEST := $(VENV)/bin/west
 
+TEST_BUILD_DIR ?= build_tests
+
 .PHONY: all build flash monitor clean pristine menuconfig guiconfig \
-        display rom_report ram_report size debug
+        display rom_report ram_report size debug test
 
 all: build
 
@@ -85,9 +88,14 @@ size: build
 	@echo ""
 	@ls -lh $(BUILD_DIR)/zephyr/zephyr.uf2 | awk '{print "UF2: " $$5}'
 
+# Unit tests (native_sim)
+test:
+	$(WEST) build -b native_sim tests --build-dir $(TEST_BUILD_DIR)
+	$(TEST_BUILD_DIR)/zephyr/zephyr.exe
+
 # Clean
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(TEST_BUILD_DIR)
 
 # Full pristine rebuild
 pristine:

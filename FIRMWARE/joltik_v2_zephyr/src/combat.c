@@ -62,7 +62,7 @@ void backoff(uint8_t dir)
 			LOG_DBG("Backoff: opponent found");
 			return;
 		}
-		k_yield();
+		k_sleep(K_MSEC(1));
 	}
 
 	/* No opponent found, move forward */
@@ -125,7 +125,7 @@ void attack(void)
 			if (k_uptime_get() - attack_start > 200) {
 				break;
 			}
-			k_yield();
+			k_sleep(K_MSEC(1));
 		}
 	}
 	/* Priority 6: Side-right only - rotate right */
@@ -137,7 +137,7 @@ void attack(void)
 			if (k_uptime_get() - attack_start > 200) {
 				break;
 			}
-			k_yield();
+			k_sleep(K_MSEC(1));
 		}
 	}
 }

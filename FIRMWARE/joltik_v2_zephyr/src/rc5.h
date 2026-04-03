@@ -19,4 +19,12 @@ struct rc5_message {
 int rc5_init(void);
 bool rc5_get_message(struct rc5_message *msg, int32_t timeout_ms);
 
+/* Exposed for unit testing */
+#ifdef CONFIG_ZTEST
+void rc5_test_reset(void);
+void rc5_test_decode_pulse(uint8_t signal, uint32_t period_us);
+uint8_t rc5_test_get_bits(void);
+uint16_t rc5_test_get_command(void);
+#endif
+
 #endif

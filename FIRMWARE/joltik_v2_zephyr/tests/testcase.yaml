@@ -1,0 +1,12 @@
+common:
+  tags:
+    - joltik
+    - sumo
+  harness: ztest
+
+tests:
+  joltik.unit_tests:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
