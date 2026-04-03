@@ -6,9 +6,6 @@ build_zephyr/
 build_tests/
 twister-out/
 
-# West manifest (managed locally)
-FIRMWARE/joltik_v2_zephyr/west.yml
-
 # Binary artifacts
 *.bin
 

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Workspace manifest for Zephyr CI and local `west init -l .` from this directory.
+
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.3.0
+      import: true
