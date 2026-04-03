@@ -1,0 +1,14 @@
+# Zephyr / CMake–Ninja build trees
+FIRMWARE/joltik_v2_zephyr/build/
+build_zephyr/
+twister-out/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.directory
+
+# SolidWorks lock files (CAD/)
+~$*
