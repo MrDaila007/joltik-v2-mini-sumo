@@ -18,6 +18,7 @@
 #include "button.h"
 #include "rc5.h"
 #include "settings.h"
+#include "display.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -111,6 +112,7 @@ static void stop_robot(void)
 			break;
 		}
 
+		display_request_update();
 		led_set_state(STATE_WAITING);
 		k_msleep(500);
 		led_off();
@@ -163,6 +165,11 @@ int main(void)
 		LOG_ERR("Settings init failed: %d", ret);
 	}
 
+	ret = display_init();
+	if (ret) {
+		LOG_WRN("Display init failed: %d", ret);
+	}
+
 	/* Apply loaded settings */
 	atomic_set(&current_tactic, g_settings.current_tactic);
 
@@ -203,6 +210,7 @@ int main(void)
 			break;
 		}
 
+		display_request_update();
 		k_msleep(50);
 	}
 
@@ -292,6 +300,8 @@ int main(void)
 			attack();
 			LOG_DBG("Attacking");
 		}
+
+		display_request_update();
 	}
 
 	return 0;

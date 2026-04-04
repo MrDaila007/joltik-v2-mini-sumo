@@ -1,12 +1,12 @@
 mainmenu "Joltik V2 Sumo Robot Configuration"
 
 config JOLTIK_DISPLAY
-	bool "Enable SSD1306 OLED display"
+	bool "Enable SSD1306 OLED display (u8g2)"
 	default n
-	select DISPLAY
-	select CHARACTER_FRAMEBUFFER
+	depends on I2C
 	help
 	  Enable the optional 128x32 SSD1306 OLED display on I2C1 (GPIO2/GPIO3).
+	  Uses vendored u8g2 graphics library for rendering.
 
 config JOLTIK_IR_REMOTE
 	bool "Enable RC5 IR remote control"

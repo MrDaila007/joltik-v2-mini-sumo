@@ -16,4 +16,15 @@ target_sources(app PRIVATE
     src/settings.c
 )
 
-target_sources_ifdef(CONFIG_JOLTIK_DISPLAY app PRIVATE src/display.c)
+target_sources_ifdef(CONFIG_JOLTIK_DISPLAY app PRIVATE
+    src/display.c
+    src/u8g2_zephyr_hal.c
+)
+
+# u8g2 graphics library (vendored subset)
+if(CONFIG_JOLTIK_DISPLAY)
+    set(U8G2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/u8g2)
+    file(GLOB U8G2_SOURCES ${U8G2_DIR}/*.c)
+    target_sources(app PRIVATE ${U8G2_SOURCES})
+    target_include_directories(app PRIVATE ${U8G2_DIR})
+endif()

@@ -32,11 +32,14 @@ int led_init(void)
 	return 0;
 }
 
+/* Brightness cap: 64/255 ≈ 25% of max */
+#define LED_BRIGHTNESS_SCALE 64
+
 void led_set_color(uint8_t r, uint8_t g, uint8_t b)
 {
-	pending_pixel.r = r;
-	pending_pixel.g = g;
-	pending_pixel.b = b;
+	pending_pixel.r = (r * LED_BRIGHTNESS_SCALE) / 255;
+	pending_pixel.g = (g * LED_BRIGHTNESS_SCALE) / 255;
+	pending_pixel.b = (b * LED_BRIGHTNESS_SCALE) / 255;
 	k_work_submit(&led_work);
 }
 
