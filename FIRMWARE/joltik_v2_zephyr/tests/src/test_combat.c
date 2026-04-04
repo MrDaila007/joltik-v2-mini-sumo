@@ -162,41 +162,9 @@ ZTEST(combat, test_attack_side_right_rotates)
 	/* attack() completed */
 }
 
-/* --- Edge detection in attack --- */
-
-ZTEST(combat, test_attack_left_edge_triggers_backoff)
-{
-	/* Left edge detected -> backoff should engage (motors reverse) */
-	set_opponent(&sen_fl, true);
-	set_opponent(&sen_fr, true);
-	adc_emul_const_value_set(adc_dev, 1, 500); /* left line sensor = edge */
-
-	attack();
-
-	/* After backoff, motors should have been driven (reverse then forward) */
-	/* Just verify it doesn't crash and motors are in some state */
-	int left_dir = gpio_emul_output_get(motor_left_dir.port, motor_left_dir.pin);
-	/* backoff ends with forward drive */
-	zassert_equal(left_dir, 0, "After backoff: should end moving forward");
-}
-
-ZTEST(combat, test_attack_right_edge_triggers_backoff)
-{
-	set_opponent(&sen_fl, true);
-	adc_emul_const_value_set(adc_dev, 0, 500); /* right line sensor = edge */
-
-	attack();
-	/* Should not crash */
-}
-
-ZTEST(combat, test_attack_both_edges)
-{
-	adc_emul_const_value_set(adc_dev, 0, 500);
-	adc_emul_const_value_set(adc_dev, 1, 500);
-
-	attack();
-	/* Both edges: backoff right, should not crash */
-}
+/* --- Edge detection is handled by main loop, not attack() ---
+ * attack() no longer checks line sensors; caller must do it first.
+ */
 
 /* --- Backoff tests --- */
 

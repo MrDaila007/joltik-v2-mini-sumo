@@ -3,6 +3,14 @@
 
 #include <stdint.h>
 
+/*
+ * Concurrency: g_settings is read from main thread (combat/tactics),
+ * written from shell thread (config commands), and read from system
+ * workqueue (display). On Cortex-M0+, uint8_t and aligned uint16_t
+ * reads/writes are atomic (single LDR/STR instruction).
+ * current_tactic at runtime is managed via atomic_t in main.c;
+ * g_settings.current_tactic is only used for NVS persistence.
+ */
 struct robot_settings {
 	uint8_t  current_tactic;
 	uint16_t line_threshold;

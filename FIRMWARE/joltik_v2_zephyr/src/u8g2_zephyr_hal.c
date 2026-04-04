@@ -7,8 +7,11 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/logging/log.h>
 
 #include "u8g2_zephyr_hal.h"
+
+LOG_MODULE_REGISTER(u8g2_hal, LOG_LEVEL_WRN);
 
 /* I2C transfer buffer — SSD1306 max payload is 1 control byte + 128 data bytes */
 #define I2C_BUF_SIZE 256
@@ -44,6 +47,9 @@ static uint8_t u8x8_byte_zephyr_hw_i2c(u8x8_t *u8x8, uint8_t msg,
 		for (uint16_t i = 0; i < arg_int; i++) {
 			if (i2c_buf_pos < I2C_BUF_SIZE) {
 				i2c_buf[i2c_buf_pos++] = data[i];
+			} else {
+				LOG_WRN("I2C buffer overflow, dropping bytes");
+				break;
 			}
 		}
 		break;

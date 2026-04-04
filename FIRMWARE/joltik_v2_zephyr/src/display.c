@@ -10,6 +10,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/logging/log.h>
 
 #include "display.h"
@@ -20,7 +21,7 @@
 LOG_MODULE_REGISTER(display, LOG_LEVEL_INF);
 
 static u8g2_t u8g2;
-static bool display_ready;
+static atomic_t display_ready = ATOMIC_INIT(0);
 
 /* Sensor box geometry */
 #define BOX_W     29
@@ -38,7 +39,7 @@ static const uint8_t box_x[4] = { 0, 33, 66, 99 };
 
 static void display_work_handler(struct k_work *work)
 {
-	if (!display_ready) {
+	if (!atomic_get(&display_ready)) {
 		return;
 	}
 
@@ -138,7 +139,7 @@ int display_init(void)
 	u8g2_DrawStr(&u8g2, (128 - tw) / 2, 24, splash);
 	u8g2_SendBuffer(&u8g2);
 
-	display_ready = true;
+	atomic_set(&display_ready, 1);
 	LOG_INF("Display initialized (u8g2)");
 	return 0;
 }

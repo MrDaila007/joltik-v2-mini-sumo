@@ -17,7 +17,9 @@
  *   Line R (ADC):  GPIO28 (ADC ch2)
  *   Line L (ADC):  GPIO29 (ADC ch3)
  *
- * Note: GPIO8 (motor R) and GPIO9 (servo) share PWM slice 4.
+ * WARNING: GPIO8 (motor R) and GPIO9 (servo) share PWM slice 4.
+ * Both channels MUST use the same period (currently 20ms/50Hz).
+ * Changing one channel's frequency affects the other — RP2040 HW constraint.
  *       Both run at 50Hz (servo frequency). Motor audible hum is acceptable.
  */
 

@@ -9,8 +9,8 @@ LOG_MODULE_REGISTER(button, LOG_LEVEL_INF);
 #define DOUBLE_CLICK_WINDOW_MS 400
 
 static struct k_sem press_sem;
-static volatile int64_t last_press_time;
-static volatile int press_count;
+static bool pending_press;
+static int64_t first_press_time;
 
 static void button_input_cb(struct input_event *evt, void *user_data)
 {
@@ -18,8 +18,6 @@ static void button_input_cb(struct input_event *evt, void *user_data)
 
 	/* Only handle key press events (value=1), not release */
 	if (evt->type == INPUT_EV_KEY && evt->value == 1) {
-		press_count++;
-		last_press_time = k_uptime_get();
 		k_sem_give(&press_sem);
 	}
 }
@@ -29,30 +27,40 @@ INPUT_CALLBACK_DEFINE(NULL, button_input_cb, NULL);
 int button_init(void)
 {
 	k_sem_init(&press_sem, 0, 1);
-	press_count = 0;
-	last_press_time = 0;
+	pending_press = false;
+	first_press_time = 0;
 
 	LOG_INF("Button initialized");
 	return 0;
 }
 
+/*
+ * Non-blocking button poll with double-click detection.
+ * Must be called frequently (e.g. every loop iteration).
+ * BTN_SINGLE is returned after the double-click window expires.
+ */
 enum button_event button_poll(void)
 {
-	/* Non-blocking check: wait briefly for a press */
+	int64_t now = k_uptime_get();
+
 	if (k_sem_take(&press_sem, K_NO_WAIT) != 0) {
+		/* No new press — check if pending single expired */
+		if (pending_press && (now - first_press_time) >= DOUBLE_CLICK_WINDOW_MS) {
+			pending_press = false;
+			return BTN_SINGLE;
+		}
 		return BTN_NONE;
 	}
 
-	/* Got first press, wait for possible second press */
-	int saved_count = press_count;
-	k_msleep(DOUBLE_CLICK_WINDOW_MS);
-
-	if (press_count > saved_count) {
-		/* Second press arrived within window */
-		press_count = 0;
+	/* Got a press */
+	if (pending_press && (now - first_press_time) < DOUBLE_CLICK_WINDOW_MS) {
+		/* Second press within window */
+		pending_press = false;
 		return BTN_DOUBLE;
 	}
 
-	press_count = 0;
-	return BTN_SINGLE;
+	/* First press — start double-click window */
+	first_press_time = now;
+	pending_press = true;
+	return BTN_NONE;
 }

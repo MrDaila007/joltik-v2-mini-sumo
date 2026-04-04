@@ -76,6 +76,30 @@ static void ir_thread_entry(void *p1, void *p2, void *p3)
 K_THREAD_DEFINE(ir_tid, IR_STACK_SIZE, ir_thread_entry,
 		NULL, NULL, NULL, IR_PRIORITY, 0, 0);
 
+/* ==================== Countdown (interruptible) ==================== */
+static bool countdown(void)
+{
+	for (int i = 5; i > 0; i--) {
+		LOG_INF("Countdown: %d", i);
+		led_set_state(i % 2 ? STATE_COUNTDOWN : STATE_WAITING);
+
+		int64_t deadline = k_uptime_get() + 1000;
+
+		while (k_uptime_get() < deadline) {
+			if (!atomic_get(&running)) {
+				return false;
+			}
+			if (button_poll() == BTN_SINGLE) {
+				return false;
+			}
+			k_sleep(K_MSEC(50));
+		}
+	}
+
+	led_set_state(STATE_SEARCHING);
+	return true;
+}
+
 /* ==================== Stop & Tactic Select ==================== */
 static void stop_robot(void)
 {
@@ -94,7 +118,6 @@ static void stop_robot(void)
 		if (evt == BTN_DOUBLE) {
 			uint8_t t = (atomic_get(&current_tactic) + 1) % TACTIC_COUNT;
 			atomic_set(&current_tactic, t);
-			g_settings.current_tactic = t;
 			LOG_INF("Tactic: %u", t);
 
 			for (uint8_t i = 0; i <= t; i++) {
@@ -190,7 +213,6 @@ int main(void)
 		if (evt == BTN_DOUBLE) {
 			uint8_t t = (atomic_get(&current_tactic) + 1) % TACTIC_COUNT;
 			atomic_set(&current_tactic, t);
-			g_settings.current_tactic = t;
 			LOG_INF("Tactic selected: %u", t);
 
 			for (uint8_t i = 0; i <= t; i++) {
@@ -216,18 +238,11 @@ int main(void)
 
 	/* ---- 5-second countdown ---- */
 	atomic_set(&running, 1);
-	led_set_state(STATE_COUNTDOWN);
 
-	for (int i = 5; i > 0; i--) {
-		LOG_INF("Countdown: %d", i);
-		if (i % 2) {
-			led_set_state(STATE_COUNTDOWN);
-		} else {
-			led_off();
-		}
-		k_msleep(1000);
+	if (!countdown()) {
+		/* Aborted — go to stop state, main loop will handle restart */
+		motors_stop();
 	}
-	led_set_state(STATE_SEARCHING);
 
 	/* Execute selected tactic start routine */
 	uint8_t tactic = atomic_get(&current_tactic);
@@ -241,17 +256,9 @@ int main(void)
 		enum button_event evt = button_poll();
 		if (evt == BTN_SINGLE) {
 			stop_robot();
-			/* Restart with tactics */
 			tactic = atomic_get(&current_tactic);
-			/* 5-second countdown before restart */
-			for (int i = 5; i > 0; i--) {
-				LOG_INF("Countdown: %d", i);
-				if (i % 2) {
-					led_set_state(STATE_COUNTDOWN);
-				} else {
-					led_off();
-				}
-				k_msleep(1000);
+			if (!countdown()) {
+				continue;
 			}
 			tactics_execute(tactic);
 			continue;
@@ -261,14 +268,8 @@ int main(void)
 		if (!atomic_get(&running)) {
 			stop_robot();
 			tactic = atomic_get(&current_tactic);
-			for (int i = 5; i > 0; i--) {
-				LOG_INF("Countdown: %d", i);
-				if (i % 2) {
-					led_set_state(STATE_COUNTDOWN);
-				} else {
-					led_off();
-				}
-				k_msleep(1000);
+			if (!countdown()) {
+				continue;
 			}
 			tactics_execute(tactic);
 			continue;
@@ -301,7 +302,13 @@ int main(void)
 			LOG_DBG("Attacking");
 		}
 
-		display_request_update();
+		/* Rate-limit display updates to ~10 Hz */
+		static int64_t last_display;
+
+		if (k_uptime_get() - last_display >= 100) {
+			display_request_update();
+			last_display = k_uptime_get();
+		}
 	}
 
 	return 0;

@@ -25,11 +25,16 @@ static const struct adc_dt_spec line_right_adc =
 static const struct adc_dt_spec line_left_adc =
 	ADC_DT_SPEC_GET_BY_IDX(ZEPHYR_USER_NODE, 1);
 
-/* ADC buffers */
-static int16_t adc_buf;
-static struct adc_sequence adc_seq = {
-	.buffer = &adc_buf,
-	.buffer_size = sizeof(adc_buf),
+/* Per-channel ADC buffers to avoid race between main thread and workqueue */
+static int16_t adc_buf_right;
+static int16_t adc_buf_left;
+static struct adc_sequence adc_seq_right = {
+	.buffer = &adc_buf_right,
+	.buffer_size = sizeof(adc_buf_right),
+};
+static struct adc_sequence adc_seq_left = {
+	.buffer = &adc_buf_left,
+	.buffer_size = sizeof(adc_buf_left),
 };
 
 /* Line threshold: Arduino 500/1024 ≈ Zephyr 2000/4096 */
@@ -107,36 +112,30 @@ bool opponent_detected(void)
 	return sensor_fl() || sensor_fr() || sensor_l() || sensor_r();
 }
 
-/* Line sensors: read ADC value */
-static int adc_read_channel(const struct adc_dt_spec *spec)
+/* Line sensors: read ADC raw value (12-bit, 0-4095) */
+static int adc_read_channel(const struct adc_dt_spec *spec,
+			     struct adc_sequence *seq, int16_t *buf)
 {
 	int ret;
 
-	adc_sequence_init_dt(spec, &adc_seq);
-	ret = adc_read_dt(spec, &adc_seq);
+	adc_sequence_init_dt(spec, seq);
+	ret = adc_read_dt(spec, seq);
 	if (ret < 0) {
 		LOG_ERR("ADC read failed: %d", ret);
 		return 0;
 	}
 
-	int32_t val = adc_buf;
-	ret = adc_raw_to_millivolts_dt(spec, &val);
-	/* Return raw value if millivolt conversion not supported */
-	if (ret < 0) {
-		return adc_buf;
-	}
-
-	return adc_buf;
+	return *buf;
 }
 
 int line_read_left(void)
 {
-	return adc_read_channel(&line_left_adc);
+	return adc_read_channel(&line_left_adc, &adc_seq_left, &adc_buf_left);
 }
 
 int line_read_right(void)
 {
-	return adc_read_channel(&line_right_adc);
+	return adc_read_channel(&line_right_adc, &adc_seq_right, &adc_buf_right);
 }
 
 bool line_on_ring_left(void)

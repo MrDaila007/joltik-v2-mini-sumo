@@ -68,9 +68,12 @@ static int cmd_tactic(const struct shell *sh, size_t argc, char **argv)
 		static const char *names[] = {
 			"straight charge", "reverse start", "left sweep", "right sweep"
 		};
-		shell_print(sh, "Current tactic: %u (%s)",
-			    g_settings.current_tactic,
-			    names[g_settings.current_tactic]);
+		uint8_t t = g_settings.current_tactic;
+
+		if (t >= TACTIC_COUNT) {
+			t = 0;
+		}
+		shell_print(sh, "Current tactic: %u (%s)", t, names[t]);
 	}
 	return 0;
 }

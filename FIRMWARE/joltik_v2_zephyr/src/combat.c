@@ -10,6 +10,10 @@
 LOG_MODULE_REGISTER(combat, LOG_LEVEL_DBG);
 
 static int count;
+/*
+ * search_dir is updated by attack() when a side sensor triggers,
+ * so search() continues looking where the opponent was last seen.
+ */
 static uint8_t search_dir = DIR_LEFT;
 
 void combat_reset_count(void)
@@ -70,33 +74,19 @@ void backoff(uint8_t dir)
 	k_msleep(100);
 }
 
+/* NOTE: caller (main loop) must check line sensors before calling attack() */
 void attack(void)
 {
 	led_set_state(STATE_ATTACKING);
 	int64_t attack_start = k_uptime_get();
 
-	/* Check line sensors first */
-	bool line_l = line_on_ring_left();
-	bool line_r = line_on_ring_right();
-
-	if (!line_l && !line_r) {
-		backoff(DIR_RIGHT);
-		return;
-	}
-	if (!line_l) {
-		backoff(DIR_RIGHT);
-		return;
-	}
-	if (!line_r) {
-		backoff(DIR_LEFT);
-		return;
-	}
-
-	/* Priority 1: All four sensors - full speed ram */
+	/* Priority 1: All four sensors - full speed ram with ramp */
 	if (sensor_front() && sensor_l() && sensor_r()) {
 		int spd = g_settings.max_speed + count;
 		drive(spd, spd);
-		count++;
+		if (count < 255 - g_settings.max_speed) {
+			count++;
+		}
 		LOG_DBG("Attack ALL max speed");
 	}
 	/* Priority 2: Both front sensors - straight attack */

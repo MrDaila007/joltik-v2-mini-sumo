@@ -4,6 +4,7 @@
 
 #include "settings.h"
 #include "sensors.h"
+#include "tactics.h"
 
 LOG_MODULE_REGISTER(app_settings, LOG_LEVEL_INF);
 
@@ -87,6 +88,13 @@ int app_settings_init(void)
 	if (ret) {
 		LOG_ERR("Settings load failed: %d", ret);
 		return ret;
+	}
+
+	/* Validate tactic loaded from flash */
+	if (g_settings.current_tactic >= TACTIC_COUNT) {
+		LOG_WRN("Invalid tactic %u from flash, reset to 0",
+			g_settings.current_tactic);
+		g_settings.current_tactic = 0;
 	}
 
 	/* Apply loaded threshold to sensors module */
